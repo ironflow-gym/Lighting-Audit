@@ -1,0 +1,7 @@
+{
+  "name": "Theatrical Lighting Audit PWA",
+  "description": "A professional tool for theatrical lighting technicians to audit equipment, manage references, and generate reports with photo support.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
