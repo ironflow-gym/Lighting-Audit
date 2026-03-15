@@ -8,7 +8,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
 import { v4 as uuidv4 } from 'uuid';
 import { processImage } from '../utils/image';
-import { Plus, Trash2, Camera, Image, Search, Filter, MapPin, Tag, AlertCircle, Download, BookOpen, X, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Camera, Image, Search, Filter, MapPin, Tag, AlertCircle, Download, BookOpen, X, ChevronRight, Edit2 } from 'lucide-react';
 import type { AuditLogEntry, Photo, IdentificationReference } from '../types';
 import { exportToCSV, exportToPDF, exportToRTF } from '../utils/export';
 import ConfirmModal from '../components/ConfirmModal';
@@ -20,6 +20,8 @@ export default function AuditLogPage() {
   const references = useLiveQuery(() => db.identificationReferences.toArray());
 
   const [isAdding, setIsAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [viewingLog, setViewingLog] = useState<AuditLogEntry | null>(null);
   const [showExport, setShowExport] = useState(false);
   const [showRefPicker, setShowRefPicker] = useState(false);
   const [search, setSearch] = useState('');
@@ -52,20 +54,47 @@ export default function AuditLogPage() {
   const handleAddEntry = async () => {
     if (!newEntry.assetId || !newEntry.category) return;
     
-    await db.auditLogs.add({
-      id: uuidv4(),
-      assetId: newEntry.assetId,
-      category: newEntry.category,
-      specificType: newEntry.specificType || '',
-      condition: newEntry.condition || 'Good/Show Ready',
-      location: newEntry.location || 'Storage',
-      notes: newEntry.notes || '',
-      timestamp: new Date().toISOString(),
-      photos: newEntry.photos || []
-    } as AuditLogEntry);
+    if (editingId) {
+      await db.auditLogs.update(editingId, {
+        assetId: newEntry.assetId,
+        category: newEntry.category,
+        specificType: newEntry.specificType || '',
+        condition: newEntry.condition || 'Good/Show Ready',
+        location: newEntry.location || 'Storage',
+        notes: newEntry.notes || '',
+        photos: newEntry.photos || []
+      });
+    } else {
+      await db.auditLogs.add({
+        id: uuidv4(),
+        assetId: newEntry.assetId,
+        category: newEntry.category,
+        specificType: newEntry.specificType || '',
+        condition: newEntry.condition || 'Good/Show Ready',
+        location: newEntry.location || 'Storage',
+        notes: newEntry.notes || '',
+        timestamp: new Date().toISOString(),
+        photos: newEntry.photos || []
+      } as AuditLogEntry);
+    }
     
     setNewEntry({ assetId: '', category: 'Fixture', specificType: '', condition: 'Good/Show Ready', location: 'Storage', notes: '', photos: [] });
     setIsAdding(false);
+    setEditingId(null);
+  };
+
+  const handleEdit = (log: AuditLogEntry) => {
+    setNewEntry({
+      assetId: log.assetId,
+      category: log.category,
+      specificType: log.specificType,
+      condition: log.condition,
+      location: log.location,
+      notes: log.notes,
+      photos: log.photos
+    });
+    setEditingId(log.id);
+    setIsAdding(true);
   };
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -183,7 +212,7 @@ export default function AuditLogPage() {
       {isAdding && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div className="bg-white rounded-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-bold mb-4">New Audit Entry</h2>
+            <h2 className="text-xl font-bold mb-4">{editingId ? 'Edit Audit Entry' : 'New Audit Entry'}</h2>
             
             <div className="space-y-4">
               <div className="flex justify-between items-center bg-emerald-50 p-3 rounded-xl border border-emerald-100">
@@ -304,7 +333,7 @@ export default function AuditLogPage() {
 
               <div className="flex gap-3 pt-4">
                 <button 
-                  onClick={() => setIsAdding(false)}
+                  onClick={() => { setIsAdding(false); setEditingId(null); }}
                   className="flex-1 py-2 border border-slate-200 rounded-xl text-slate-600 font-medium"
                 >
                   Cancel
@@ -313,7 +342,7 @@ export default function AuditLogPage() {
                   onClick={handleAddEntry}
                   className="flex-1 py-2 bg-emerald-600 text-white rounded-xl font-medium"
                 >
-                  Save Entry
+                  {editingId ? 'Update Entry' : 'Save Entry'}
                 </button>
               </div>
             </div>
@@ -382,9 +411,119 @@ export default function AuditLogPage() {
         </div>
       )}
 
+      {viewingLog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white rounded-2xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-start mb-6">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider ${getConditionColor(viewingLog.condition)}`}>
+                    {viewingLog.condition}
+                  </span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 bg-slate-100 px-2 py-1 rounded-full">
+                    {viewingLog.location}
+                  </span>
+                </div>
+                <h2 className="text-2xl font-bold text-slate-900 break-words">{viewingLog.assetId}</h2>
+                <p className="text-slate-500 font-medium">{viewingLog.specificType || viewingLog.category}</p>
+              </div>
+              <button 
+                onClick={() => setViewingLog(null)}
+                className="p-2 hover:bg-slate-100 rounded-full transition-colors ml-4"
+              >
+                <X size={24} className="text-slate-400" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Audit Details</h3>
+                  <div className="space-y-3">
+                    <div className="flex justify-between text-sm py-2 border-b border-slate-100">
+                      <span className="text-slate-500">Category</span>
+                      <span className="font-bold text-slate-900">{viewingLog.category}</span>
+                    </div>
+                    <div className="flex justify-between text-sm py-2 border-b border-slate-100">
+                      <span className="text-slate-500">Audit Date</span>
+                      <span className="font-bold text-slate-900">{new Date(viewingLog.timestamp).toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Notes</h3>
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 whitespace-pre-wrap text-slate-700 leading-relaxed italic">
+                    {viewingLog.notes || 'No notes provided.'}
+                  </div>
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <button 
+                    onClick={() => { handleEdit(viewingLog); setViewingLog(null); }}
+                    className="flex-1 py-3 bg-slate-900 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-slate-200 active:scale-95 transition-all"
+                  >
+                    <Edit2 size={18} />
+                    Edit Entry
+                  </button>
+                  <button 
+                    onClick={() => { setConfirmDeleteId(viewingLog.id); setViewingLog(null); }}
+                    className="flex-1 py-3 border border-red-100 text-red-600 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-red-50 active:scale-95 transition-all"
+                  >
+                    <Trash2 size={18} />
+                    Delete
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Audit Photos</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  {viewingLog.photos.map(p => (
+                    <div key={p.id} className="aspect-square rounded-xl overflow-hidden border border-slate-100 shadow-sm">
+                      <img src={p.data} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    </div>
+                  ))}
+                  {viewingLog.photos.length === 0 && (
+                    <div className="col-span-2 py-12 bg-slate-50 rounded-xl border border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400">
+                      <Camera size={32} className="mb-2 opacity-20" />
+                      <p className="text-xs">No photos captured</p>
+                    </div>
+                  )}
+                </div>
+                
+                {references?.find(r => r.type === viewingLog.specificType && r.category === viewingLog.category) && (
+                  <div className="mt-8">
+                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Reference Comparison</h3>
+                    <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 flex items-center gap-4">
+                      <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 border border-emerald-200">
+                        <img 
+                          src={references.find(r => r.type === viewingLog.specificType && r.category === viewingLog.category)!.photos[0]?.thumbnail} 
+                          alt="" 
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-bold text-emerald-700 uppercase tracking-wider">Linked Reference</p>
+                        <p className="text-sm font-bold text-slate-900 truncate">{viewingLog.specificType}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-4">
         {filteredLogs?.map(log => (
-          <div key={log.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+          <div 
+            key={log.id} 
+            onClick={() => setViewingLog(log)}
+            className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm cursor-pointer hover:border-emerald-200 hover:shadow-md transition-all group"
+          >
             <div className="flex justify-between items-start mb-3 gap-2">
               <div className="flex gap-3 min-w-0 flex-1">
                 <div className="relative flex-shrink-0">
@@ -435,7 +574,7 @@ export default function AuditLogPage() {
 
             <div className="flex justify-end mt-2 pt-2 border-t border-slate-50">
               <button 
-                onClick={() => setConfirmDeleteId(log.id)}
+                onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(log.id); }}
                 className="flex items-center gap-1 text-slate-400 hover:text-red-500 transition-colors p-2 text-xs font-medium"
               >
                 <Trash2 size={16} />
